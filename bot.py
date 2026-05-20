@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 
 import discord
 from dotenv import load_dotenv
@@ -63,20 +64,58 @@ class MusicBot(discord.Client):
         self.voice_client_instance = await channel.connect()
         logging.info("Connected to voice channel: %s", channel.name)
 
+    def get_music_files(self) -> list[Path]:
+        music_path = Path(MUSIC_FOLDER)
+
+        if not music_path.exists():
+            raise RuntimeError(f"Music folder does not exist: {music_path}")
+
+        files = sorted(
+            [
+                file
+                for file in music_path.iterdir()
+                if file.is_file() and file.suffix.lower() in SUPPORTED_EXTENSIONS
+            ],
+            key=lambda file: file.name.lower(),
+        )
+
+        if not files:
+            raise RuntimeError(f"No music files found in {music_path}")
+
+        return files
+
     async def play_music_loop(self) -> None:
         while True:
             try:
                 if not self.voice_client_instance or not self.voice_client_instance.is_connected():
                     await self.connect_to_channel()
 
-                track = get_radio_track(MUSIC_FOLDER, SUPPORTED_EXTENSIONS)
-                await self.play_file(track.file, track.start_seconds)
+                music_files = self.get_music_files()
+                radio_track = get_radio_track(MUSIC_FOLDER, SUPPORTED_EXTENSIONS)
+
+                current_index = music_files.index(radio_track.file)
+
+                await self.play_file(radio_track.file, radio_track.start_seconds)
+
+                next_index = (current_index + 1) % len(music_files)
+
+                while True:
+                    if not self.voice_client_instance or not self.voice_client_instance.is_connected():
+                        break
+
+                    music_files = self.get_music_files()
+
+                    if next_index >= len(music_files):
+                        next_index = 0
+
+                    await self.play_file(music_files[next_index], 0.0)
+                    next_index = (next_index + 1) % len(music_files)
 
             except Exception:
                 logging.exception("Music loop crashed. Retrying in 10 seconds.")
                 await asyncio.sleep(10)
 
-    async def play_file(self, file, start_seconds: float) -> None:
+    async def play_file(self, file: Path, start_seconds: float) -> None:
         if not self.voice_client_instance:
             return
 
@@ -91,9 +130,11 @@ class MusicBot(discord.Client):
 
         logging.info("Now playing: %s from %.2f seconds", file.name, start_seconds)
 
+        before_options = f"-ss {start_seconds}" if start_seconds > 0 else None
+
         source = discord.FFmpegPCMAudio(
             str(file),
-            before_options=f"-ss {start_seconds}",
+            before_options=before_options,
         )
 
         self.voice_client_instance.play(source, after=after_playing)
