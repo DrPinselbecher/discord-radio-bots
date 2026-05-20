@@ -1,6 +1,34 @@
+# Environment files
 .env
 .env.*
+!.env.template
+
+# Python virtual environments
 .venv/
+venv/
+env/
+
+# Python cache files
 __pycache__/
-*.pyc
-music/
+*.py[cod]
+*$py.class
+
+# Python tooling/cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Audio files / runtime music folders
+music/*
+!music/.gitkeep
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
