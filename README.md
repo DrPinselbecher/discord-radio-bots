@@ -3,12 +3,13 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
 ![discord.py](https://img.shields.io/badge/Discord-discord.py-5865F2)
 ![FFmpeg](https://img.shields.io/badge/Audio-FFmpeg-green)
+![Opus](https://img.shields.io/badge/Audio-Opus-7A5CFF)
 ![Linux](https://img.shields.io/badge/Deployment-Linux_VM-lightgrey)
 ![Status](https://img.shields.io/badge/Status-In_Development-yellow)
 
 Discord Radio Bots is a lightweight Python-based Discord voice bot setup for running multiple permanent audio radio channels on a single Discord server.
 
-Each bot instance connects to one configured Discord voice channel and plays audio files from one configured folder. The project is designed for small Linux VM deployments and does not require a web framework, database or public HTTP endpoint.
+Each bot instance connects to one configured Discord voice channel and plays pre-converted `.opus` audio files from one configured folder. The project is designed for small Linux VM deployments and does not require a web framework, database or public HTTP endpoint.
 
 ---
 
@@ -20,6 +21,7 @@ Each bot instance connects to one configured Discord voice channel and plays aud
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Local Development Setup](#local-development-setup)
+- [Opus Conversion Workflow](#opus-conversion-workflow)
 - [Environment Configuration](#environment-configuration)
 - [Discord Application Setup](#discord-application-setup)
 - [Radio Playback Mode](#radio-playback-mode)
@@ -43,9 +45,9 @@ The setup supports multiple independent bot instances.
 Example setup:
 
 ```text
-Bot Instance 1  -> Discord Voice Channel 1  -> custom audio folder 1
-Bot Instance 2  -> Discord Voice Channel 2  -> custom audio folder 2
-Bot Instance 3  -> Discord Voice Channel 3  -> custom audio folder 3
+Bot Instance 1  -> Discord Voice Channel 1  -> configured audio folder 1
+Bot Instance 2  -> Discord Voice Channel 2  -> configured audio folder 2
+Bot Instance 3  -> Discord Voice Channel 3  -> configured audio folder 3
 ```
 
 Each bot instance uses:
@@ -54,6 +56,7 @@ Each bot instance uses:
 - one fixed Discord voice channel ID
 - one configured audio folder
 - one separate environment file
+- pre-converted `.opus` audio files
 
 This allows multiple independent radio channels to run at the same time on one Discord server.
 
@@ -67,6 +70,7 @@ This allows multiple independent radio channels to run at the same time on one D
 | Discord Library | discord.py |
 | Voice Support | discord.py[voice] / PyNaCl |
 | Audio Playback | FFmpeg |
+| Audio Runtime Format | Opus |
 | Audio Metadata | FFprobe |
 | Environment Handling | python-dotenv |
 | Deployment Target | Linux VM |
@@ -79,6 +83,8 @@ This allows multiple independent radio channels to run at the same time on one D
 - multiple Discord bot instances on one server
 - one bot instance per voice channel
 - folder-based audio playback
+- Opus-only runtime playback
+- FFmpeg Opus playback with `codec="copy"`
 - radio-like playback behavior
 - time-based track position calculation
 - automatic reconnect handling
@@ -89,15 +95,14 @@ This allows multiple independent radio channels to run at the same time on one D
 - no web framework required
 - no public HTTP or HTTPS endpoint required
 
-Supported audio formats:
+Supported runtime audio format:
 
 ```text
-.mp3
-.wav
-.ogg
-.flac
-.m4a
+.opus
 ```
+
+> [!IMPORTANT]
+> The bot is optimized for pre-converted Opus audio files. Other audio formats should be converted to `.opus` before deployment.
 
 ---
 
@@ -127,7 +132,7 @@ Linux VM
 ├── Python virtual environment
 ├── Discord bot source code
 ├── Environment files
-├── Audio folders
+├── Opus audio folders
 └── systemd services
 ```
 
@@ -143,11 +148,13 @@ discord-radio-bots/
 ├── radio.py
 ├── README.md
 ├── requirements.txt
+├── converted/
+│   └── .gitkeep
 └── music/
     └── .gitkeep
 ```
 
-The `music/` directory is intentionally kept empty in Git.
+The `music/` and `converted/` directories are intentionally kept empty in Git.
 
 Runtime-only files that must not be committed:
 
@@ -155,9 +162,31 @@ Runtime-only files that must not be committed:
 .env.bot-1
 .env.bot-2
 .env.bot-3
+.env.*
 .venv/
 music/*
+converted/*
 ```
+
+Recommended runtime folder example:
+
+```text
+music/
+├── radio-channel-1/
+├── radio-channel-2/
+└── radio-channel-3/
+```
+
+Recommended local conversion folder example:
+
+```text
+converted/
+├── radio-channel-1_opus/
+├── radio-channel-2_opus/
+└── radio-channel-3_opus/
+```
+
+Folder names are only examples. The actual names only need to match the `MUSIC_FOLDER` values in the environment files.
 
 ---
 
@@ -169,7 +198,7 @@ music/*
 |---|---|
 | Python 3.11+ | Runtime for the bot |
 | Git | Version control |
-| FFmpeg | Audio playback |
+| FFmpeg | Audio conversion and playback |
 | FFprobe | Audio duration detection |
 | Discord Developer Account | Bot application setup |
 
@@ -212,9 +241,9 @@ ffprobe -version
 
 Both commands must return version information.
 
-### 5. Create Audio Folders
+### 5. Create Local Audio Folders
 
-Create one folder per bot instance.
+Create one source folder per bot instance.
 
 Windows PowerShell:
 
@@ -230,11 +259,9 @@ macOS / Linux:
 mkdir -p music/radio-channel-1 music/radio-channel-2 music/radio-channel-3
 ```
 
-Folder names are examples only. Any naming can be used as long as the matching environment file points to the correct folder.
+### 6. Add Source Audio Files
 
-### 6. Add Audio Files
-
-Place at least one supported audio file into each configured folder.
+Place source audio files into the matching local folder.
 
 Example:
 
@@ -243,6 +270,82 @@ music/radio-channel-1/
 music/radio-channel-2/
 music/radio-channel-3/
 ```
+
+These source files are only used locally for conversion and should not be committed.
+
+---
+
+## Opus Conversion Workflow
+
+The bot is optimized for `.opus` files.
+
+Audio files should be converted locally before they are uploaded to the server. This avoids live re-encoding on the VM and reduces CPU usage during playback.
+
+The bot uses:
+
+```python
+discord.FFmpegOpusAudio(..., codec="copy")
+```
+
+This means the prepared Opus stream is copied directly instead of being encoded again during playback.
+
+### Create Local Conversion Folders
+
+Windows PowerShell:
+
+```powershell
+mkdir converted\radio-channel-1_opus
+mkdir converted\radio-channel-2_opus
+mkdir converted\radio-channel-3_opus
+```
+
+macOS / Linux:
+
+```bash
+mkdir -p converted/radio-channel-1_opus converted/radio-channel-2_opus converted/radio-channel-3_opus
+```
+
+### Convert Audio Files to Opus
+
+Windows PowerShell example for channel 1:
+
+```powershell
+Get-ChildItem ".\music\radio-channel-1" -File | ForEach-Object {
+    ffmpeg -y -i $_.FullName -vn -c:a libopus -b:a 96k -ar 48000 -ac 2 ".\converted\radio-channel-1_opus\$($_.BaseName).opus"
+}
+```
+
+Windows PowerShell example for channel 2:
+
+```powershell
+Get-ChildItem ".\music\radio-channel-2" -File | ForEach-Object {
+    ffmpeg -y -i $_.FullName -vn -c:a libopus -b:a 96k -ar 48000 -ac 2 ".\converted\radio-channel-2_opus\$($_.BaseName).opus"
+}
+```
+
+Windows PowerShell example for channel 3:
+
+```powershell
+Get-ChildItem ".\music\radio-channel-3" -File | ForEach-Object {
+    ffmpeg -y -i $_.FullName -vn -c:a libopus -b:a 96k -ar 48000 -ac 2 ".\converted\radio-channel-3_opus\$($_.BaseName).opus"
+}
+```
+
+### Recommended Opus Settings
+
+| Option | Value | Purpose |
+|---|---|---|
+| Codec | `libopus` | Converts audio to Opus |
+| Bitrate | `96k` | Good balance between quality and file size |
+| Sample Rate | `48000` | Recommended for Discord voice |
+| Channels | `2` | Stereo output |
+| Video | `-vn` | Removes video streams |
+
+### Important
+
+Only `.opus` files should be placed in the active server music folders when `codec="copy"` is used.
+
+Unsupported runtime files such as `.mp3`, `.m4a`, `.wav`, `.flac` or `.mp4` should be converted locally before upload.
 
 ---
 
@@ -266,6 +369,27 @@ macOS / Linux:
 cp .env.template .env.bot-1
 cp .env.template .env.bot-2
 cp .env.template .env.bot-3
+```
+
+### `.env.template`
+
+```env
+# Discord bot token for one bot instance.
+# Create the token in the Discord Developer Portal.
+DISCORD_TOKEN=
+
+# Discord voice channel ID used by this bot instance.
+# Enable Discord Developer Mode, right-click the voice channel and copy the channel ID.
+VOICE_CHANNEL_ID=
+
+# Path to the audio folder used by this bot instance.
+# The folder can be inside ./music/ or an absolute server path.
+#
+# Examples:
+# MUSIC_FOLDER=./music/radio-channel-1
+# MUSIC_FOLDER=./music/radio-channel-2
+# MUSIC_FOLDER=/home/ubuntu/audio/radio-channel-1
+MUSIC_FOLDER=
 ```
 
 ### Example `.env.bot-1`
@@ -409,7 +533,7 @@ Playback flow:
 Read configured audio folder
    |
    v
-Sort audio files alphabetically
+Sort .opus files alphabetically
    |
    v
 Read track durations with FFprobe
@@ -430,6 +554,8 @@ This creates radio-like behavior:
 - bot restarts resume at a calculated radio position
 - playback does not always begin with the same file
 - each configured folder behaves like a continuous radio loop
+- only the initial start or reconnect jumps into the calculated track position
+- following track changes start cleanly from the beginning of the next file
 
 > [!IMPORTANT]
 > Stable file ordering is required for predictable radio behavior. Files are sorted alphabetically.
@@ -437,9 +563,9 @@ This creates radio-like behavior:
 Recommended naming pattern:
 
 ```text
-001_track_name.mp3
-002_track_name.mp3
-003_track_name.mp3
+001_track_name.opus
+002_track_name.opus
+003_track_name.opus
 ```
 
 ---
@@ -485,7 +611,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 5. Create Audio Folders
+### 5. Create Runtime Audio Folders
 
 ```bash
 mkdir -p music/radio-channel-1 music/radio-channel-2 music/radio-channel-3
@@ -509,23 +635,40 @@ nano .env.bot-2
 nano .env.bot-3
 ```
 
-### 7. Upload Audio Files
+Secure the environment files:
+
+```bash
+chmod 600 .env.bot-1 .env.bot-2 .env.bot-3
+```
+
+### 7. Upload Opus Audio Files
 
 Audio files are intentionally not part of the Git repository.
 
-Recommended upload methods:
+Convert audio files locally first, then upload the generated `.opus` files to the VM.
 
-```text
-scp
-rsync
-SFTP
-manual upload through your server workflow
+PowerShell example for channel 1:
+
+```powershell
+scp -r -i "$env:USERPROFILE\.ssh\oracle_discord_music_server" ".\converted\radio-channel-1_opus\*" ubuntu@YOUR_SERVER_IP:/home/ubuntu/discord-radio-bots/music/radio-channel-1/
 ```
 
-Example with `scp`:
+PowerShell example for channel 2:
+
+```powershell
+scp -r -i "$env:USERPROFILE\.ssh\oracle_discord_music_server" ".\converted\radio-channel-2_opus\*" ubuntu@YOUR_SERVER_IP:/home/ubuntu/discord-radio-bots/music/radio-channel-2/
+```
+
+PowerShell example for channel 3:
+
+```powershell
+scp -r -i "$env:USERPROFILE\.ssh\oracle_discord_music_server" ".\converted\radio-channel-3_opus\*" ubuntu@YOUR_SERVER_IP:/home/ubuntu/discord-radio-bots/music/radio-channel-3/
+```
+
+Check uploaded files on the VM:
 
 ```bash
-scp ./local-audio-file.mp3 ubuntu@YOUR_SERVER_IP:/home/ubuntu/discord-radio-bots/music/radio-channel-1/
+find /home/ubuntu/discord-radio-bots/music -maxdepth 2 -type f
 ```
 
 ### 8. Test One Bot Manually
@@ -699,6 +842,18 @@ pip install -r requirements.txt
 sudo systemctl restart discord-radio-bot-1 discord-radio-bot-2 discord-radio-bot-3
 ```
 
+### Check Running Bot Processes
+
+```bash
+pgrep -af "python bot.py"
+```
+
+### Stop Manual Bot Processes
+
+```bash
+pkill -f "python bot.py"
+```
+
 ---
 
 ## Security Notes
@@ -707,6 +862,7 @@ sudo systemctl restart discord-radio-bot-1 discord-radio-bot-2 discord-radio-bot
 - Discord bot tokens must be treated as secrets.
 - Bot tokens must be rotated immediately if leaked.
 - Audio files should not be committed.
+- Converted audio files should not be committed.
 - Discord bots do not require administrator permissions.
 - Only the minimum required Discord permissions should be granted.
 - The VM does not need public HTTP or HTTPS ports for this project.
@@ -716,25 +872,45 @@ sudo systemctl restart discord-radio-bot-1 discord-radio-bot-2 discord-radio-bot
 Recommended `.gitignore`:
 
 ```gitignore
+# Environment files
 .env
 .env.*
 !.env.template
+
+# Python virtual environments
 .venv/
 venv/
 env/
+
+# Python cache files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Python tooling/cache
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Audio files / runtime music folders
 music/*
+converted/*
 !music/.gitkeep
+!converted/.gitkeep
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# IDE files
 .vscode/
 .idea/
+
+# Other private notes
+notice.md
 ```
 
 ---
@@ -742,6 +918,21 @@ Thumbs.db
 ## Audio File Requirements
 
 This project does not include audio files.
+
+The runtime music folders on the server should contain `.opus` files only.
+
+Recommended source file types before conversion:
+
+```text
+.mp3
+.wav
+.ogg
+.flac
+.m4a
+.mp4
+```
+
+These files should be converted locally to `.opus` before being uploaded to the VM.
 
 Use only audio files that you are allowed to play on your Discord server.
 
@@ -768,17 +959,21 @@ Implemented:
 - one bot instance per voice channel
 - folder-based audio playback
 - configurable audio folder per bot instance
+- Opus-only runtime playback
+- FFmpeg Opus playback with `codec="copy"`
+- local audio conversion workflow
 - radio-like playback position calculation
 - FFmpeg audio playback
 - FFprobe duration detection
 - `.env` based configuration
 - multi-instance setup through separate environment files
+- ignored runtime audio folders through `.gitkeep` placeholders
 - local Windows development setup
 - Linux VM deployment preparation
+- production-ready systemd service setup
 
 Planned improvements:
 
-- production systemd deployment
 - per-bot logging files
 - automatic deployment script
 - optional Docker Compose setup

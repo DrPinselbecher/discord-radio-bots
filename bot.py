@@ -22,7 +22,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 VOICE_CHANNEL_ID = os.getenv("VOICE_CHANNEL_ID")
 MUSIC_FOLDER = os.getenv("MUSIC_FOLDER")
 
-SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a"}
+SUPPORTED_EXTENSIONS = {".opus"}
 
 if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_TOKEN is missing.")
@@ -132,9 +132,10 @@ class MusicBot(discord.Client):
 
         before_options = f"-ss {start_seconds}" if start_seconds > 0 else None
 
-        source = discord.FFmpegPCMAudio(
+        source = discord.FFmpegOpusAudio(
             str(file),
             before_options=before_options,
+            codec="copy",
         )
 
         self.voice_client_instance.play(source, after=after_playing)

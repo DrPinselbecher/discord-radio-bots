@@ -20,7 +20,9 @@ __pycache__/
 
 # Audio files / runtime music folders
 music/*
+converted/*
 !music/.gitkeep
+!converted/.gitkeep
 
 # Logs
 *.log
@@ -32,3 +34,6 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+
+# other
+notice.md
